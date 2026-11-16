@@ -27,6 +27,8 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{border-color:#ef444466;color:#ffb4b4}
 .toast.ok{border-color:#22c55e66;color:#8af0ae}
+.hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:800;max-width:92vw;text-align:center;font-size:12px;line-height:1.4;color:var(--muted);background:#0c0f14cc;border:1px solid var(--line);padding:8px 14px;border-radius:10px;backdrop-filter:blur(8px)}
+.hint b{color:var(--text)}
 .legend{position:fixed;bottom:14px;right:14px;z-index:800;display:flex;gap:14px;background:#0c0f14cc;backdrop-filter:blur(10px);border:1px solid var(--line);padding:8px 12px;border-radius:10px;font-size:12px;color:var(--muted)}
 .legend span{display:flex;align-items:center;gap:6px}
 .lg{width:9px;height:9px;border-radius:50%;display:inline-block}
@@ -48,6 +50,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       <button class="btn" id="clearBtn" title="Clear trail">🗑</button>
     </div>
   </header>
+  <div class="hint">Phone me <b>Location/GPS ON</b> hona chahiye. Allow karo → fix aane par live dikhega. Indoors fix me 10–30s lag sakte hain.</div>
   <div class="legend"><span><i class="lg online"></i> live GPS</span></div>
   <div class="toast" id="toast"></div>
   <script src="vendor/leaflet/leaflet.js"></script>
@@ -85,25 +88,34 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       if(!firstFix){firstFix=true;map.flyTo(latlng,16,{duration:.8});toast('Live location started: ±'+Math.round(c.accuracy||0)+' m','ok');}
     }
 
-    function deny(){toast('Location permission DENIED — browser settings me allow karein.','err');stop(true);}
+    function deny(){toast('Location permission DENIED — browser site settings me Location → Allow karo.','err');stop(true);}
+    function permState(){
+      if(!navigator.permissions||!navigator.permissions.query)return Promise.resolve('unknown');
+      return navigator.permissions.query({name:'geolocation'}).then(function(s){return s.state;}).catch(function(){return 'unknown';});
+    }
+
+    function startWatch(){
+      watchId=navigator.geolocation.watchPosition(function(pos){
+        var c=pos.coords;
+        statusEl.textContent='live • ±'+Math.round(c.accuracy||0)+' m';
+        render(pos);
+      },function(e){
+        if(e&&e.code===1){deny();return;}
+        if(e&&e.code===3){statusEl.textContent='GPS fix ka wait… (timeout) retrying';return;}
+        statusEl.textContent='waiting for GPS fix… ('+errText(e)+')';
+        if(!start._toasted){start._toasted=true;toast('GPS fix nahi mil raha — phone me Location/GPS ON karo aur khuli jagah par try karo.','err');}
+      },{enableHighAccuracy:true,maximumAge:3000,timeout:20000});
+    }
 
     async function start(){
       if(!navigator.geolocation){toast('Browser me geolocation support nahi hai.','err');return;}
       if(!secureOk()){toast('GPS needs https/localhost.','err');return;}
-      active=true;firstFix=false;gpsBtn.classList.add('active');
-      statusEl.textContent='requesting permission…';
-      try{
-        var p=await new Promise(function(res,rej){navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:25000,maximumAge:0});});
-        render(p);
-      }catch(e){
-        if(e&&e.code===1){deny();return;}
-        statusEl.textContent='error: '+errText(e);
-        toast('Location failed: '+errText(e),'err');stop(true);return;
-      }
-      if(!active)return;
-      watchId=navigator.geolocation.watchPosition(render,function(e){
-        if(e&&e.code===1)deny();else statusEl.textContent='waiting… ('+errText(e)+')';
-      },{enableHighAccuracy:true,maximumAge:3000,timeout:30000});
+      active=true;firstFix=false;start._toasted=false;gpsBtn.classList.add('active');
+      statusEl.textContent='checking permission…';
+      var ps=await permState();
+      if(ps==='denied'){deny();return;}
+      statusEl.textContent=ps==='granted'?'permission granted — getting GPS fix…':'requesting permission… Allow karo';
+      startWatch();
     }
 
     function stop(silent){
