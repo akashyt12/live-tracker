@@ -32,6 +32,12 @@ h1{font-size:22px;font-weight:700;margin-bottom:8px;text-align:center}
 .row span{color:#6b7280}
 .row b{color:#111827;font-weight:700;font-variant-numeric:tabular-nums;
   font-family:ui-monospace,Consolas,monospace;font-size:13.5px}
+.help{margin-top:16px;padding:13px 15px;border:1px solid #fde68a;background:#fffbeb;
+  color:#92400e;border-radius:10px;font-size:13px;line-height:1.65;text-align:left}
+.help[hidden]{display:none}
+.help b{color:#78350f}
+.help ol{margin:6px 0 0 18px}
+.help li{margin:2px 0}
 .foot{margin-top:18px;font-size:12px;color:#9ca3af;text-align:center}
 </style>
 </head>
@@ -46,6 +52,14 @@ h1{font-size:22px;font-weight:700;margin-bottom:8px;text-align:center}
       <div class="row"><span>Accuracy</span><b id="acc">—</b></div>
       <div class="row"><span>Updated</span><b id="upd">—</b></div>
     </div>
+    <div class="help" id="help" hidden>
+      <b>Location blocked hai. Aise Allow karo:</b>
+      <ol>
+        <li>Address bar ke paas <b>lock / tune (⚙) icon</b> par tap karo</li>
+        <li><b>Permissions</b> → <b>Location</b> → <b>Allow</b></li>
+        <li>Phir neeche <b>Reload</b> button dabao</li>
+      </ol>
+    </div>
     <p class="foot">Your location stays on this device.</p>
   </div>
 
@@ -55,6 +69,7 @@ h1{font-size:22px;font-weight:700;margin-bottom:8px;text-align:center}
   var btn = document.getElementById('btn');
   var statusEl = document.getElementById('status');
   var list = document.getElementById('list');
+  var help = document.getElementById('help');
   var latEl = document.getElementById('lat');
   var lonEl = document.getElementById('lon');
   var accEl = document.getElementById('acc');
@@ -66,6 +81,7 @@ h1{font-size:22px;font-weight:700;margin-bottom:8px;text-align:center}
   var tickTimer = null;
   var lastTs = 0;
   var running = false;
+  var mode = 'start'; // 'start' | 'stop' | 'reload'
 
   function setStatus(t) { statusEl.textContent = t; }
   function ago(ts) {
@@ -79,30 +95,38 @@ h1{font-size:22px;font-weight:700;margin-bottom:8px;text-align:center}
     return window.isSecureContext || location.hostname === 'localhost' ||
            location.hostname === '127.0.0.1' || location.hostname === '::1';
   }
+  function setBtn(text, isStop, disabled) {
+    btn.textContent = text;
+    btn.className = 'btn' + (isStop ? ' stop' : '');
+    btn.disabled = !!disabled;
+  }
 
   function onFix(pos) {
     var c = pos.coords;
     lastTs = Math.floor(Date.now() / 1000);
+    help.hidden = true;
     list.hidden = false;
     latEl.textContent = c.latitude.toFixed(6);
     lonEl.textContent = c.longitude.toFixed(6);
     accEl.textContent = '±' + Math.round(c.accuracy || 0) + ' m';
     updEl.textContent = ago(lastTs);
     setStatus('Location active.');
-    btn.textContent = 'Stop';
-    btn.classList.add('stop');
-    btn.disabled = false;
+    mode = 'stop';
+    setBtn('Stop', true, false);
+  }
+
+  function showDeniedHelp() {
+    running = false;
+    clearWatches();
+    help.hidden = false;
+    list.hidden = true;
+    setStatus('Location is blocked for this site. Allow it below, then reload.');
+    mode = 'reload';
+    setBtn('Reload', false, false);
   }
 
   function onErr(e) {
-    if (e && e.code === 1) {
-      stopWatching(true);
-      setStatus('Permission denied. Enable location for this site in browser settings, then tap Try again.');
-      btn.textContent = 'Try again';
-      btn.classList.remove('stop');
-      btn.disabled = false;
-      return;
-    }
+    if (e && e.code === 1) { showDeniedHelp(); return; }
     if (e && e.code === 3) { setStatus('Waiting for GPS fix… keep Location/GPS ON.'); return; }
     setStatus('Getting location… make sure Location/GPS is ON.');
   }
@@ -120,9 +144,8 @@ h1{font-size:22px;font-weight:700;margin-bottom:8px;text-align:center}
     clearWatches();
     if (userStopped) {
       setStatus('Location stopped. Tap to start again.');
-      btn.textContent = 'Allow Location';
-      btn.classList.remove('stop');
-      btn.disabled = false;
+      mode = 'start';
+      setBtn('Allow Location', false, false);
     }
   }
 
@@ -148,38 +171,48 @@ h1{font-size:22px;font-weight:700;margin-bottom:8px;text-align:center}
       setStatus('Location needs a secure page (https). Open this via https link.');
       return;
     }
+    // If the browser already has a hard block, re-requesting does nothing —
+    // show the manual-enable steps instead.
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then(function (s) {
+        if (s.state === 'denied') { showDeniedHelp(); return; }
+        doStart();
+      }).catch(doStart);
+    } else {
+      doStart();
+    }
+  }
+
+  function doStart() {
     running = true;
-    btn.disabled = true;
-    btn.textContent = 'Requesting…';
-    btn.classList.remove('stop');
+    help.hidden = true;
+    mode = 'stop';
+    setBtn('Requesting…', false, true);
     setStatus('Requesting permission… tap “Allow”.');
     startWatch();
   }
 
   btn.addEventListener('click', function () {
+    if (mode === 'reload') { location.reload(); return; }
     if (running) stopWatching(true);
     else start();
   });
 
-  // Safety net: a tap/click anywhere also triggers the permission request,
-  // in case a browser blocks auto-request on page load.
+  // Safety net: a tap anywhere also triggers the request if auto-start
+  // was blocked by the browser. (Ignored when in reload/help state.)
   document.addEventListener('click', function (e) {
     if (e.target === btn) return;
-    if (!running) start();
+    if (!running && mode === 'start') start();
   }, true);
 
   function autoStart() {
     if (navigator.permissions && navigator.permissions.query) {
       navigator.permissions.query({ name: 'geolocation' }).then(function (s) {
-        if (s.state === 'denied') {
-          setStatus('Location is blocked for this site. Enable it in browser settings, then tap Try again.');
-          btn.textContent = 'Try again';
-        } else {
-          start();
-        }
-      }).catch(function () { start(); });
+        if (s.state === 'denied') { showDeniedHelp(); return; }
+        doStart();
+      }).catch(doStart);
     } else {
-      start();
+      doStart();
     }
   }
 
