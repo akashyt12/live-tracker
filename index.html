@@ -50,7 +50,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       <button class="btn" id="clearBtn" title="Clear trail">🗑</button>
     </div>
   </header>
-  <div class="hint">Phone me <b>Location/GPS ON</b> hona chahiye. Allow karo → fix aane par live dikhega. Indoors fix me 10–30s lag sakte hain.</div>
+  <div class="hint" id="hint">Phone me <b>Location/GPS ON</b> + <b>Chrome</b> me kholo. 📍 dabao → Allow.</div>
   <div class="legend"><span><i class="lg online"></i> live GPS</span></div>
   <div class="toast" id="toast"></div>
   <script src="vendor/leaflet/leaflet.js"></script>
@@ -63,7 +63,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors',subdomains:'abc',maxZoom:19}).addTo(map);
 
     var statusEl=document.getElementById('statusText'),accPill=document.getElementById('accPill'),gpsBtn=document.getElementById('gpsBtn'),toastEl=document.getElementById('toast');
-    var marker=null,trailLine=null,trail=[],watchId=null,hiWatch=null,active=false,firstFix=false;
+    var marker=null,approxMarker=null,trailLine=null,trail=[],watchId=null,hiWatch=null,active=false,firstFix=false,ipTried=false,gotGpsFix=false,lastErr='';
     try{trail=JSON.parse(localStorage.getItem(TRAIL_KEY)||'[]')||[];}catch(e){trail=[];}
 
     function toast(m,k){toastEl.textContent=m;toastEl.className='toast show'+(k?' '+k:'');clearTimeout(toast._t);toast._t=setTimeout(function(){toastEl.className='toast';},4200);}
@@ -75,7 +75,38 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     function distM(la1,lo1,la2,lo2){var R=6371000,t=Math.PI/180,dLa=(la2-la1)*t,dLo=(lo2-lo1)*t;var a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1*t)*Math.cos(la2*t)*Math.sin(dLo/2)*Math.sin(dLo/2);return 2*R*Math.asin(Math.min(1,Math.sqrt(a)));}
     function maybeAddTrail(lat,lon,acc,tst){var last=trail[trail.length-1];if(!last){trail.push({lat:lat,lon:lon,acc:acc,tst:tst});return true;}var dm=distM(last.lat,last.lon,lat,lon);if(dm>8||(tst-last.tst)>15){trail.push({lat:lat,lon:lon,acc:acc,tst:tst});if(trail.length>MAX_PTS)trail=trail.slice(-MAX_PTS);return true;}last.lat=lat;last.lon=lon;last.acc=acc;last.tst=tst;return false;}
 
+    var hintEl=document.getElementById('hint');
+    function shortUA(){var u=navigator.userAgent||'';if(/Telegram/i.test(u))return 'Telegram in-app';if(/FBAN|FBAV|Instagram/i.test(u))return 'In-app (FB/IG)';if(/Line\//i.test(u))return 'LINE in-app';if(/EdgA?\//i.test(u))return 'Edge';if(/OPR\//i.test(u))return 'Opera';if(/Chrome/i.test(u))return 'Chrome';if(/Firefox/i.test(u))return 'Firefox';if(/Safari/i.test(u))return 'Safari';return 'Browser';}
+    function isInApp(){return /Telegram|FBAN|FBAV|Instagram|Line\/|;\s*wv\)/i.test(navigator.userAgent||'');}
+    function updHint(extra){if(!hintEl)return;hintEl.innerHTML='<b>'+shortUA()+'</b> · '+(secureOk()?'HTTPS ok':'NOT secure')+' · '+(extra||(lastErr?('err: '+lastErr):'tap 📍'));}
+    function showApprox(lat,lon,city){
+      var icon=L.divIcon({className:'',html:'<div class="marker-pin" style="background:#f59e0b;box-shadow:0 0 0 4px #f59e0b33,0 4px 12px #0008"></div>',iconSize:[20,20],iconAnchor:[10,10],popupAnchor:[0,-12]});
+      var label='Approximate (IP) · '+(city||'your area');
+      if(!approxMarker){approxMarker=L.marker([lat,lon],{icon:icon}).addTo(map);}
+      else{approxMarker.setLatLng([lat,lon]);}
+      approxMarker.bindPopup('<b>'+label+'</b><br>GPS precise position nahi mili');
+      if(!gotGpsFix){
+        statusEl.textContent='approx (IP) — GPS unavailable';
+        accPill.textContent='approx';
+        if(!firstFix){firstFix=true;map.flyTo([lat,lon],12,{duration:.8});}
+        toast('GPS nahi mila. Approximate (IP) location dikha raha hu'+(city?(' — '+city):'')+'. Accurate GPS ke liye Chrome me kholo.','err');
+      }
+    }
+    function ipFallback(){
+      if(ipTried||gotGpsFix)return;ipTried=true;
+      fetch('https://get.geojs.io/v1/ip/geo.json').then(function(r){return r.json();}).then(function(d){
+        var lat=parseFloat(d.latitude),lon=parseFloat(d.longitude);
+        if(isFinite(lat)&&isFinite(lon)){showApprox(lat,lon,d.city);}else{throw new Error('no');}
+      }).catch(function(){
+        fetch('https://ipapi.co/json/').then(function(r){return r.json();}).then(function(d){
+          var lat=parseFloat(d.latitude),lon=parseFloat(d.longitude);
+          if(isFinite(lat)&&isFinite(lon)){showApprox(lat,lon,d.city);}
+        }).catch(function(){});
+      });
+    }
+
     function render(pos){
+      gotGpsFix=true;if(approxMarker){map.removeLayer(approxMarker);approxMarker=null;}
       var c=pos.coords,now=Math.floor(Date.now()/1000),latlng=[c.latitude,c.longitude];
       var info=ago(now)+' • ±'+Math.round(c.accuracy||0)+' m'+(c.speed!==null&&c.speed!==undefined?' • '+Math.round(c.speed*3.6)+' km/h':'');
       if(!marker){
@@ -96,10 +127,12 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 
     function onPos(pos){ render(pos); }
     function onErr(e){
-      if(e&&e.code===1){deny();return;}
+      lastErr=errText(e);updHint('err: '+lastErr);
+      if(e&&e.code===1){ipFallback();deny();return;}
       if(e&&e.code===3){statusEl.textContent='GPS fix ka wait… (timeout) retrying…';}
       else{statusEl.textContent='waiting for GPS fix… ('+errText(e)+')';}
-      if(!start._toasted){start._toasted=true;toast('GPS fix nahi mil raha. Phone me Location/GPS ON karo, Chrome ko Location Allow karo, aur khuli jagah par try karo.','err');}
+      ipFallback();
+      if(!start._toasted){start._toasted=true;toast('GPS fix nahi mil raha. Phone me Location/GPS ON + Chrome me kholo + khuli jagah par try karo.','err');}
     }
     function startWatch(){
       // 1) quick network-assisted fix (fast even indoors, accepts recent cached fix)
@@ -109,15 +142,20 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
         if(!active)return;
         hiWatch=navigator.geolocation.watchPosition(onPos,function(){},{enableHighAccuracy:true,maximumAge:5000,timeout:60000});
       },5000);
+      // 3) if still no fix after 7s, show IP-based approximate location
+      setTimeout(function(){ if(active&&!gotGpsFix)ipFallback(); },7000);
     }
 
     async function start(){
-      if(!navigator.geolocation){toast('Browser me geolocation support nahi hai.','err');return;}
-      if(!secureOk()){toast('GPS needs https/localhost.','err');return;}
+      updHint();
+      if(isInApp()){toast('Ye in-app browser hai (Telegram/Instagram) — isme GPS block hota hai. Chrome me kholo.','err');}
+      if(!navigator.geolocation){toast('Browser me geolocation support nahi hai. Chrome me kholo.','err');ipFallback();return;}
+      if(!secureOk()){toast('GPS needs https/localhost.','err');ipFallback();return;}
       active=true;firstFix=false;start._toasted=false;gpsBtn.classList.add('active');
       statusEl.textContent='checking permission…';
       var ps=await permState();
-      if(ps==='denied'){deny();return;}
+      updHint('perm: '+ps);
+      if(ps==='denied'){ipFallback();deny();return;}
       statusEl.textContent=ps==='granted'?'permission granted — getting GPS fix…':'requesting permission… Allow karo';
       startWatch();
     }
@@ -135,6 +173,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     document.getElementById('clearBtn').addEventListener('click',function(){trail=[];save();drawTrail();statusEl.textContent='tap 📍 to start';accPill.textContent='GPS off';toast('Trail cleared');});
 
     if(trail.length){drawTrail();statusEl.textContent='saved • '+trail.length+' pts';}
+    updHint();
   })();
   </script>
 </body>
