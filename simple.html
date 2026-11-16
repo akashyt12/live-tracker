@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Location Access</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  background:#070a10;color:#e8edf5;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;padding:20px;
+}
+.bg{position:fixed;inset:0;z-index:0;overflow:hidden}
+.bg::before,.bg::after{content:"";position:absolute;border-radius:50%;filter:blur(90px);opacity:.55}
+.bg::before{width:420px;height:420px;background:#0ea5e9;top:-120px;left:-120px;animation:float1 12s ease-in-out infinite}
+.bg::after{width:480px;height:480px;background:#22c55e;bottom:-160px;right:-140px;animation:float2 14s ease-in-out infinite}
+@keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,50px)}}
+@keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(-70px,-40px)}}
+
+.card{
+  position:relative;z-index:1;width:100%;max-width:380px;
+  background:rgba(18,24,33,.72);backdrop-filter:blur(22px) saturate(140%);
+  border:1px solid rgba(255,255,255,.10);border-radius:26px;
+  padding:32px 26px 26px;text-align:center;
+  box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);
+  animation:pop .45s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes pop{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}
+
+.pin{position:relative;width:76px;height:76px;margin:0 auto 18px;display:flex;align-items:center;justify-content:center}
+.pin .core{position:relative;width:56px;height:56px;border-radius:50%;
+  background:linear-gradient(135deg,#22d3ee,#22c55e);display:flex;align-items:center;justify-content:center;
+  box-shadow:0 10px 30px rgba(34,211,238,.45)}
+.pin .core svg{width:30px;height:30px;fill:#03121a}
+.pin .ring{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(34,211,238,.5);animation:ring 2s ease-out infinite}
+.pin .ring:nth-child(2){animation-delay:.6s}
+@keyframes ring{0%{transform:scale(.7);opacity:.9}100%{transform:scale(1.5);opacity:0}}
+
+h1{font-size:21px;font-weight:750;letter-spacing:.2px;margin-bottom:7px}
+.sub{font-size:13.5px;line-height:1.5;color:#93a1b5;margin:0 auto 22px;max-width:300px}
+
+.btn{
+  width:100%;border:0;cursor:pointer;border-radius:14px;padding:15px 18px;
+  font-size:15px;font-weight:700;color:#03121a;letter-spacing:.2px;
+  background:linear-gradient(135deg,#22d3ee,#22c55e);
+  box-shadow:0 12px 30px rgba(34,197,94,.30);
+  transition:transform .12s ease,box-shadow .2s ease,opacity .2s;
+}
+.btn:hover{transform:translateY(-1px);box-shadow:0 16px 36px rgba(34,197,94,.4)}
+.btn:active{transform:translateY(0) scale(.99)}
+.btn:disabled{opacity:.55;cursor:default;box-shadow:none;transform:none}
+
+.result{display:grid;gap:1px;margin-top:20px;background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden;text-align:left;
+  animation:pop .35s ease}
+.result[hidden]{display:none}
+.row{display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:12px 16px;background:rgba(12,17,24,.6);font-size:13.5px;color:#93a1b5}
+.row b{color:#e8edf5;font-weight:650;font-variant-numeric:tabular-nums;font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:13px}
+
+.badge{display:inline-flex;align-items:center;gap:8px;margin-top:20px;
+  padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);color:#93a1b5}
+.badge .dot{width:8px;height:8px;border-radius:50%;background:#64748b;flex:0 0 auto}
+.badge.requesting{color:#7dd3fc;border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.10)}
+.badge.requesting .dot{background:#22d3ee;box-shadow:0 0 8px #22d3ee;animation:pulse 1.2s infinite}
+.badge.granted{color:#8af0ae;border-color:rgba(34,197,94,.40);background:rgba(34,197,94,.12)}
+.badge.granted .dot{background:#22c55e;box-shadow:0 0 8px #22c55e}
+.badge.denied{color:#ffb4b4;border-color:rgba(239,68,68,.40);background:rgba(239,68,68,.12)}
+.badge.denied .dot{background:#ef4444;box-shadow:0 0 8px #ef4444}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+.foot{margin-top:18px;font-size:11px;color:#5c6b80}
+</style>
+</head>
+<body>
+  <div class="bg"></div>
+  <main class="card">
+    <div class="pin">
+      <span class="ring"></span><span class="ring"></span>
+      <div class="core">
+        <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+      </div>
+    </div>
+    <h1>Enable Location</h1>
+    <p class="sub" id="sub">We need your location to show your position. Tap below and allow access.</p>
+    <button class="btn" id="allowBtn">Allow Location</button>
+    <div class="result" id="result" hidden>
+      <div class="row"><span>Latitude</span><b id="lat">—</b></div>
+      <div class="row"><span>Longitude</span><b id="lon">—</b></div>
+      <div class="row"><span>Accuracy</span><b id="acc">—</b></div>
+      <div class="row"><span>Updated</span><b id="upd">—</b></div>
+    </div>
+    <div class="badge" id="badge"><span class="dot"></span><span id="badgeText">Idle</span></div>
+    <div class="foot">Your location stays on this device.</div>
+  </main>
+
+<script>
+(function () {
+  'use strict';
+  var allowBtn = document.getElementById('allowBtn');
+  var sub = document.getElementById('sub');
+  var result = document.getElementById('result');
+  var latEl = document.getElementById('lat');
+  var lonEl = document.getElementById('lon');
+  var accEl = document.getElementById('acc');
+  var updEl = document.getElementById('upd');
+  var badge = document.getElementById('badge');
+  var badgeText = document.getElementById('badgeText');
+
+  var watchId = null;
+  var lastTs = 0;
+  var tickTimer = null;
+
+  function setBadge(kind, text) {
+    badge.className = 'badge' + (kind ? ' ' + kind : '');
+    badgeText.textContent = text;
+  }
+
+  function ago(ts) {
+    if (!ts) return '—';
+    var d = Math.max(0, Math.floor(Date.now() / 1000) - ts);
+    if (d < 5) return 'just now';
+    if (d < 60) return d + 's ago';
+    return Math.floor(d / 60) + 'm ago';
+  }
+
+  function secureOk() {
+    return window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
+  }
+
+  function errText(e) {
+    if (!e) return 'unknown error';
+    if (e.code === 1) return 'Permission denied';
+    if (e.code === 2) return 'Location unavailable';
+    if (e.code === 3) return 'Request timed out';
+    return e.message || ('Error ' + e.code);
+  }
+
+  function onFix(pos) {
+    var c = pos.coords;
+    lastTs = Math.floor(Date.now() / 1000);
+    result.hidden = false;
+    latEl.textContent = c.latitude.toFixed(6);
+    lonEl.textContent = c.longitude.toFixed(6);
+    accEl.textContent = '±' + Math.round(c.accuracy || 0) + ' m';
+    updEl.textContent = ago(lastTs);
+    setBadge('granted', 'Location active');
+    sub.textContent = 'Your live location is being tracked.';
+    allowBtn.textContent = 'Stop';
+    allowBtn.disabled = false;
+  }
+
+  function onErr(e) {
+    if (e && e.code === 1) {
+      setBadge('denied', 'Permission denied');
+      sub.textContent = 'Location permission was blocked. Enable it for this site in your browser, then try again.';
+      allowBtn.textContent = 'Try again';
+      stopWatch();
+      return;
+    }
+    if (e && e.code === 3) { setBadge('requesting', 'Waiting for GPS fix…'); return; }
+    setBadge('denied', errText(e));
+    sub.textContent = 'Could not get a location fix. Make sure Location/GPS is ON, then try again.';
+    allowBtn.textContent = 'Try again';
+  }
+
+  function stopWatch() {
+    if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
+    setBadge('', 'Stopped');
+    sub.textContent = 'Location sharing stopped. Tap to start again.';
+    allowBtn.textContent = 'Allow Location';
+  }
+
+  function start() {
+    if (!navigator.geolocation) {
+      setBadge('denied', 'Not supported');
+      sub.textContent = 'This browser does not support geolocation. Try Chrome.';
+      return;
+    }
+    if (!secureOk()) {
+      setBadge('denied', 'Insecure page');
+      sub.textContent = 'Location needs a secure page (https or localhost).';
+      return;
+    }
+    allowBtn.disabled = true;
+    setBadge('requesting', 'Requesting permission…');
+    sub.textContent = 'Please tap "Allow" on the browser prompt.';
+
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      onFix(pos);
+      startWatch();
+    }, function (e) {
+      onErr(e);
+      allowBtn.disabled = false;
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  }
+
+  function startWatch() {
+    if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+    watchId = navigator.geolocation.watchPosition(onFix, onErr, { enableHighAccuracy: true, maximumAge: 3000, timeout: 30000 });
+    if (tickTimer) clearInterval(tickTimer);
+    tickTimer = setInterval(function () { if (lastTs) updEl.textContent = ago(lastTs); }, 1000);
+  }
+
+  allowBtn.addEventListener('click', function () {
+    if (watchId !== null) { stopWatch(); return; }
+    start();
+  });
+})();
+</script>
+</body>
+</html>
