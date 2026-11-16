@@ -2,113 +2,63 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Location Access</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
 body{
-  font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  background:#070a10;color:#e8edf5;overflow:hidden;
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  background:#ffffff;color:#111827;min-height:100vh;
   display:flex;align-items:center;justify-content:center;padding:20px;
 }
-.bg{position:fixed;inset:0;z-index:0;overflow:hidden}
-.bg::before,.bg::after{content:"";position:absolute;border-radius:50%;filter:blur(90px);opacity:.55}
-.bg::before{width:420px;height:420px;background:#0ea5e9;top:-120px;left:-120px;animation:float1 12s ease-in-out infinite}
-.bg::after{width:480px;height:480px;background:#22c55e;bottom:-160px;right:-140px;animation:float2 14s ease-in-out infinite}
-@keyframes float1{0%,100%{transform:translate(0,0)}50%{transform:translate(60px,50px)}}
-@keyframes float2{0%,100%{transform:translate(0,0)}50%{transform:translate(-70px,-40px)}}
-
-.card{
-  position:relative;z-index:1;width:100%;max-width:380px;
-  background:rgba(18,24,33,.72);backdrop-filter:blur(22px) saturate(140%);
-  border:1px solid rgba(255,255,255,.10);border-radius:26px;
-  padding:32px 26px 26px;text-align:center;
-  box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);
-  animation:pop .45s cubic-bezier(.2,.8,.2,1);
-}
-@keyframes pop{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}
-
-.pin{position:relative;width:76px;height:76px;margin:0 auto 18px;display:flex;align-items:center;justify-content:center}
-.pin .core{position:relative;width:56px;height:56px;border-radius:50%;
-  background:linear-gradient(135deg,#22d3ee,#22c55e);display:flex;align-items:center;justify-content:center;
-  box-shadow:0 10px 30px rgba(34,211,238,.45)}
-.pin .core svg{width:30px;height:30px;fill:#03121a}
-.pin .ring{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(34,211,238,.5);animation:ring 2s ease-out infinite}
-.pin .ring:nth-child(2){animation-delay:.6s}
-@keyframes ring{0%{transform:scale(.7);opacity:.9}100%{transform:scale(1.5);opacity:0}}
-
-h1{font-size:21px;font-weight:750;letter-spacing:.2px;margin-bottom:7px}
-.sub{font-size:13.5px;line-height:1.5;color:#93a1b5;margin:0 auto 22px;max-width:300px}
-
+.box{width:100%;max-width:420px}
+h1{font-size:22px;font-weight:700;margin-bottom:8px;text-align:center}
+.status{font-size:14px;color:#6b7280;text-align:center;line-height:1.5;margin-bottom:22px;min-height:21px}
 .btn{
-  width:100%;border:0;cursor:pointer;border-radius:14px;padding:15px 18px;
-  font-size:15px;font-weight:700;color:#03121a;letter-spacing:.2px;
-  background:linear-gradient(135deg,#22d3ee,#22c55e);
-  box-shadow:0 12px 30px rgba(34,197,94,.30);
-  transition:transform .12s ease,box-shadow .2s ease,opacity .2s;
+  width:100%;border:0;border-radius:10px;padding:15px 18px;
+  font-size:16px;font-weight:700;color:#fff;cursor:pointer;
+  background:#2563eb;transition:background .15s,opacity .15s;
 }
-.btn:hover{transform:translateY(-1px);box-shadow:0 16px 36px rgba(34,197,94,.4)}
-.btn:active{transform:translateY(0) scale(.99)}
-.btn:disabled{opacity:.55;cursor:default;box-shadow:none;transform:none}
-
-.result{display:grid;gap:1px;margin-top:20px;background:rgba(255,255,255,.07);
-  border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden;text-align:left;
-  animation:pop .35s ease}
-.result[hidden]{display:none}
-.row{display:flex;align-items:center;justify-content:space-between;gap:14px;
-  padding:12px 16px;background:rgba(12,17,24,.6);font-size:13.5px;color:#93a1b5}
-.row b{color:#e8edf5;font-weight:650;font-variant-numeric:tabular-nums;font-family:ui-monospace,"Cascadia Code",Consolas,monospace;font-size:13px}
-
-.badge{display:inline-flex;align-items:center;gap:8px;margin-top:20px;
-  padding:7px 14px;border-radius:999px;font-size:12.5px;font-weight:600;
-  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.10);color:#93a1b5}
-.badge .dot{width:8px;height:8px;border-radius:50%;background:#64748b;flex:0 0 auto}
-.badge.requesting{color:#7dd3fc;border-color:rgba(34,211,238,.35);background:rgba(34,211,238,.10)}
-.badge.requesting .dot{background:#22d3ee;box-shadow:0 0 8px #22d3ee;animation:pulse 1.2s infinite}
-.badge.granted{color:#8af0ae;border-color:rgba(34,197,94,.40);background:rgba(34,197,94,.12)}
-.badge.granted .dot{background:#22c55e;box-shadow:0 0 8px #22c55e}
-.badge.denied{color:#ffb4b4;border-color:rgba(239,68,68,.40);background:rgba(239,68,68,.12)}
-.badge.denied .dot{background:#ef4444;box-shadow:0 0 8px #ef4444}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-
-.foot{margin-top:18px;font-size:11px;color:#5c6b80}
+.btn:hover{background:#1d4ed8}
+.btn:active{background:#1e40af}
+.btn:disabled{opacity:.55;cursor:default}
+.btn.stop{background:#dc2626}
+.btn.stop:hover{background:#b91c1c}
+.list{border:1px solid #e5e7eb;border-radius:10px;margin-top:20px;overflow:hidden}
+.list[hidden]{display:none}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px 16px;font-size:14px;border-bottom:1px solid #f1f5f9}
+.row:last-child{border-bottom:0}
+.row span{color:#6b7280}
+.row b{color:#111827;font-weight:700;font-variant-numeric:tabular-nums;
+  font-family:ui-monospace,Consolas,monospace;font-size:13.5px}
+.foot{margin-top:18px;font-size:12px;color:#9ca3af;text-align:center}
 </style>
 </head>
 <body>
-  <div class="bg"></div>
-  <main class="card">
-    <div class="pin">
-      <span class="ring"></span><span class="ring"></span>
-      <div class="core">
-        <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
-      </div>
-    </div>
+  <div class="box">
     <h1>Enable Location</h1>
-    <p class="sub" id="sub">Requesting your location… please tap “Allow” on the browser prompt.</p>
-    <button class="btn" id="allowBtn" style="display:none">Allow Location</button>
-    <div class="result" id="result" hidden>
+    <p class="status" id="status">Requesting permission… tap “Allow”.</p>
+    <button class="btn" id="btn">Allow Location</button>
+    <div class="list" id="list" hidden>
       <div class="row"><span>Latitude</span><b id="lat">—</b></div>
       <div class="row"><span>Longitude</span><b id="lon">—</b></div>
       <div class="row"><span>Accuracy</span><b id="acc">—</b></div>
       <div class="row"><span>Updated</span><b id="upd">—</b></div>
     </div>
-    <div class="badge" id="badge"><span class="dot"></span><span id="badgeText">Starting…</span></div>
-    <div class="foot">Your location stays on this device.</div>
-  </main>
+    <p class="foot">Your location stays on this device.</p>
+  </div>
 
 <script>
 (function () {
   'use strict';
-  var allowBtn = document.getElementById('allowBtn');
-  var sub = document.getElementById('sub');
-  var result = document.getElementById('result');
+  var btn = document.getElementById('btn');
+  var statusEl = document.getElementById('status');
+  var list = document.getElementById('list');
   var latEl = document.getElementById('lat');
   var lonEl = document.getElementById('lon');
   var accEl = document.getElementById('acc');
   var updEl = document.getElementById('upd');
-  var badge = document.getElementById('badge');
-  var badgeText = document.getElementById('badgeText');
 
   var watchId = null;
   var hiWatch = null;
@@ -117,17 +67,7 @@ h1{font-size:21px;font-weight:750;letter-spacing:.2px;margin-bottom:7px}
   var lastTs = 0;
   var running = false;
 
-  function setBadge(kind, text) {
-    badge.className = 'badge' + (kind ? ' ' + kind : '');
-    badgeText.textContent = text;
-  }
-  function showBtn(text) {
-    allowBtn.style.display = 'block';
-    allowBtn.textContent = text;
-    allowBtn.disabled = false;
-  }
-  function hideBtn() { allowBtn.style.display = 'none'; }
-
+  function setStatus(t) { statusEl.textContent = t; }
   function ago(ts) {
     if (!ts) return '—';
     var d = Math.max(0, Math.floor(Date.now() / 1000) - ts);
@@ -136,108 +76,115 @@ h1{font-size:21px;font-weight:750;letter-spacing:.2px;margin-bottom:7px}
     return Math.floor(d / 60) + 'm ago';
   }
   function secureOk() {
-    return window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
-  }
-  function errText(e) {
-    if (!e) return 'unknown error';
-    if (e.code === 1) return 'Permission denied';
-    if (e.code === 2) return 'Location unavailable';
-    if (e.code === 3) return 'Request timed out';
-    return e.message || ('Error ' + e.code);
+    return window.isSecureContext || location.hostname === 'localhost' ||
+           location.hostname === '127.0.0.1' || location.hostname === '::1';
   }
 
   function onFix(pos) {
     var c = pos.coords;
     lastTs = Math.floor(Date.now() / 1000);
-    result.hidden = false;
+    list.hidden = false;
     latEl.textContent = c.latitude.toFixed(6);
     lonEl.textContent = c.longitude.toFixed(6);
     accEl.textContent = '±' + Math.round(c.accuracy || 0) + ' m';
     updEl.textContent = ago(lastTs);
-    setBadge('granted', 'Location active');
-    sub.textContent = 'Your live location is being tracked.';
-    if (running) showBtn('Stop');
+    setStatus('Location active.');
+    btn.textContent = 'Stop';
+    btn.classList.add('stop');
+    btn.disabled = false;
   }
 
   function onErr(e) {
     if (e && e.code === 1) {
-      setBadge('denied', 'Permission denied');
-      sub.textContent = 'Location permission was blocked. Enable it for this site in your browser, then tap Try again.';
-      stopWatch(true);
-      showBtn('Try again');
+      stopWatching(true);
+      setStatus('Permission denied. Enable location for this site in browser settings, then tap Try again.');
+      btn.textContent = 'Try again';
+      btn.classList.remove('stop');
+      btn.disabled = false;
       return;
     }
-    if (e && e.code === 3) { setBadge('requesting', 'Waiting for GPS fix…'); return; }
-    setBadge('requesting', errText(e));
-    sub.textContent = 'Getting a location fix… make sure Location/GPS is ON.';
+    if (e && e.code === 3) { setStatus('Waiting for GPS fix… keep Location/GPS ON.'); return; }
+    setStatus('Getting location… make sure Location/GPS is ON.');
   }
 
-  function stopWatch(userStopped) {
-    running = false;
+  function clearWatches() {
     if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
     if (hiWatch !== null && navigator.geolocation) navigator.geolocation.clearWatch(hiWatch);
     watchId = null; hiWatch = null;
     if (hiTimer) { clearTimeout(hiTimer); hiTimer = null; }
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
-    if (userStopped) { sub.textContent = 'Location sharing stopped. Tap to start again.'; }
-    if (userStopped) showBtn('Allow Location');
+  }
+
+  function stopWatching(userStopped) {
+    running = false;
+    clearWatches();
+    if (userStopped) {
+      setStatus('Location stopped. Tap to start again.');
+      btn.textContent = 'Allow Location';
+      btn.classList.remove('stop');
+      btn.disabled = false;
+    }
   }
 
   function startWatch() {
-    if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
-    if (hiWatch !== null && navigator.geolocation) navigator.geolocation.clearWatch(hiWatch);
-    // quick network-assisted fix first (fast even indoors, accepts recent cached fix)
+    clearWatches();
     watchId = navigator.geolocation.watchPosition(onFix, onErr,
       { enableHighAccuracy: false, maximumAge: 60000, timeout: 20000 });
-    // refine with precise GPS after a few seconds
     hiTimer = setTimeout(function () {
       if (!running) return;
       hiWatch = navigator.geolocation.watchPosition(onFix, function () {},
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 60000 });
     }, 5000);
-    if (tickTimer) clearInterval(tickTimer);
     tickTimer = setInterval(function () { if (lastTs) updEl.textContent = ago(lastTs); }, 1000);
   }
 
   function start() {
+    if (running) return;
     if (!navigator.geolocation) {
-      setBadge('denied', 'Not supported');
-      sub.textContent = 'This browser does not support geolocation. Please use Chrome.';
+      setStatus('This browser does not support location. Please use Chrome.');
       return;
     }
     if (!secureOk()) {
-      setBadge('denied', 'Insecure page');
-      sub.textContent = 'Location needs a secure page (https or localhost).';
+      setStatus('Location needs a secure page (https). Open this via https link.');
       return;
     }
     running = true;
-    hideBtn();
-    setBadge('requesting', 'Requesting permission…');
-    sub.textContent = 'Requesting your location… please tap “Allow” on the browser prompt.';
+    btn.disabled = true;
+    btn.textContent = 'Requesting…';
+    btn.classList.remove('stop');
+    setStatus('Requesting permission… tap “Allow”.');
     startWatch();
   }
 
-  allowBtn.addEventListener('click', function () {
-    if (running) stopWatch(true);
+  btn.addEventListener('click', function () {
+    if (running) stopWatching(true);
     else start();
   });
 
-  // Auto-request permission as soon as the page opens (no click needed).
-  window.addEventListener('load', function () {
+  // Safety net: a tap/click anywhere also triggers the permission request,
+  // in case a browser blocks auto-request on page load.
+  document.addEventListener('click', function (e) {
+    if (e.target === btn) return;
+    if (!running) start();
+  }, true);
+
+  function autoStart() {
     if (navigator.permissions && navigator.permissions.query) {
       navigator.permissions.query({ name: 'geolocation' }).then(function (s) {
         if (s.state === 'denied') {
-          setBadge('denied', 'Permission blocked');
-          sub.textContent = 'Location is blocked for this site. Enable it in browser settings, then tap Try again.';
-          showBtn('Try again');
+          setStatus('Location is blocked for this site. Enable it in browser settings, then tap Try again.');
+          btn.textContent = 'Try again';
         } else {
-          setTimeout(start, 250);
+          start();
         }
-      }).catch(function () { setTimeout(start, 250); });
+      }).catch(function () { start(); });
     } else {
-      setTimeout(start, 250);
+      start();
     }
-  });
+  }
+
+  // Auto-request permission as soon as the page opens (no click needed).
+  window.addEventListener('load', function () { setTimeout(autoStart, 200); });
 })();
 </script>
 </body>
