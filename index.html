@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Live Tracker</title>
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+<style>
+:root{--bg:#0c0f14;--panel:#121821ee;--line:#ffffff12;--text:#e8edf5;--muted:#93a1b5;--accent:#22d3ee;--green:#22c55e;--red:#ef4444}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+#map{position:fixed;inset:0;z-index:0;background:#0a0d12}
+.leaflet-tile-pane{filter:grayscale(.55) invert(1) hue-rotate(180deg) brightness(.82) contrast(1.08)}
+.topbar{position:fixed;top:0;left:0;right:0;height:64px;z-index:1000;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:linear-gradient(180deg,#0c0f14ee,#0c0f1488);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.title{font-weight:700;letter-spacing:.5px;font-size:16px}
+.sub{font-size:11px;color:var(--muted);margin-top:1px}
+.actions{display:flex;align-items:center;gap:8px}
+.pill{font-size:12px;padding:5px 10px;border-radius:999px;background:#22c55e1a;border:1px solid #22c55e44;color:#8af0ae}
+.btn{background:#ffffff10;border:1px solid var(--line);color:var(--text);min-width:38px;height:38px;border-radius:10px;cursor:pointer;font-size:17px;display:flex;align-items:center;justify-content:center;transition:.15s;padding:0 10px}
+.btn:hover{background:#ffffff1c}
+.btn.active{background:#22c55e26;border-color:#22c55e88;color:#8af0ae}
+.toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%) translateY(20px);z-index:1200;background:#121821f2;border:1px solid var(--line);color:var(--text);padding:11px 18px;border-radius:12px;font-size:13px;box-shadow:0 12px 40px #0009;opacity:0;pointer-events:none;transition:.25s;max-width:88vw;text-align:center}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{border-color:#ef444466;color:#ffb4b4}
+.toast.ok{border-color:#22c55e66;color:#8af0ae}
+.legend{position:fixed;bottom:14px;right:14px;z-index:800;display:flex;gap:14px;background:#0c0f14cc;backdrop-filter:blur(10px);border:1px solid var(--line);padding:8px 12px;border-radius:10px;font-size:12px;color:var(--muted)}
+.legend span{display:flex;align-items:center;gap:6px}
+.lg{width:9px;height:9px;border-radius:50%;display:inline-block}
+.lg.online{background:var(--green);box-shadow:0 0 8px var(--green)}
+.marker-pin{width:20px;height:20px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 4px #22d3ee33,0 4px 12px #0008;background:var(--green);position:relative}
+.marker-pin::after{content:"";position:absolute;inset:-9px;border-radius:50%;border:2px solid #22c55e66;animation:ring 2s infinite}
+@keyframes ring{0%{transform:scale(.6);opacity:.9}100%{transform:scale(1.6);opacity:0}}
+@media (max-width:640px){.legend{display:none}}
+</style>
+</head>
+<body>
+  <div id="map"></div>
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span><div><div class="title">Live Tracker</div><div class="sub" id="statusText">tap 📍 to start</div></div></div>
+    <div class="actions">
+      <span class="pill" id="accPill">GPS off</span>
+      <button class="btn" id="gpsBtn" title="Share my GPS location">📍</button>
+      <button class="btn" id="fitBtn" title="Fit">⌖</button>
+      <button class="btn" id="clearBtn" title="Clear trail">🗑</button>
+    </div>
+  </header>
+  <div class="legend"><span><i class="lg online"></i> live GPS</span></div>
+  <div class="toast" id="toast"></div>
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script>
+  (function(){
+    'use strict';
+    var NAME='This-Phone', TRAIL_KEY='lt_trail_v1', MAX_PTS=800;
+    var map=L.map('map',{zoomControl:false,preferCanvas:true}).setView([20.59,78.96],5);
+    L.control.zoom({position:'bottomright'}).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors',subdomains:'abc',maxZoom:19}).addTo(map);
+
+    var statusEl=document.getElementById('statusText'),accPill=document.getElementById('accPill'),gpsBtn=document.getElementById('gpsBtn'),toastEl=document.getElementById('toast');
+    var marker=null,trailLine=null,trail=[],watchId=null,active=false,firstFix=false;
+    try{trail=JSON.parse(localStorage.getItem(TRAIL_KEY)||'[]')||[];}catch(e){trail=[];}
+
+    function toast(m,k){toastEl.textContent=m;toastEl.className='toast show'+(k?' '+k:'');clearTimeout(toast._t);toast._t=setTimeout(function(){toastEl.className='toast';},4200);}
+    function ago(ts){var d=Math.max(0,Math.floor(Date.now()/1000)-ts);if(d<60)return d+'s ago';if(d<3600)return Math.floor(d/60)+'m ago';if(d<86400)return Math.floor(d/3600)+'h ago';return Math.floor(d/86400)+'d ago';}
+    function errText(e){if(!e)return'unknown error';if(e.code===1)return'permission denied';if(e.code===2)return'position unavailable (no GPS/network fix)';if(e.code===3)return'timeout';return e.message||('code '+e.code);}
+    function save(){try{localStorage.setItem(TRAIL_KEY,JSON.stringify(trail.slice(-MAX_PTS)));}catch(e){}}
+    function secureOk(){return window.isSecureContext||location.hostname==='localhost'||location.hostname==='127.0.0.1'||location.hostname==='::1';}
+    function drawTrail(){var pts=trail.map(function(p){return[p.lat,p.lon];});if(trailLine){map.removeLayer(trailLine);trailLine=null;}if(pts.length>1){trailLine=L.polyline(pts,{color:'#22d3ee',weight:3,opacity:.85,smoothFactor:1}).addTo(map);}}
+
+    function render(pos){
+      var c=pos.coords,now=Math.floor(Date.now()/1000),latlng=[c.latitude,c.longitude];
+      var info=ago(now)+' • ±'+Math.round(c.accuracy||0)+' m'+(c.speed!==null&&c.speed!==undefined?' • '+Math.round(c.speed*3.6)+' km/h':'');
+      if(!marker){
+        marker=L.marker(latlng,{icon:L.divIcon({className:'',html:'<div class="marker-pin"></div>',iconSize:[20,20],iconAnchor:[10,10],popupAnchor:[0,-12]})}).addTo(map);
+        marker.bindPopup('<b>'+NAME+'</b><br>'+info);
+      }else{marker.setLatLng(latlng);marker.setPopupContent('<b>'+NAME+'</b><br>'+info);}
+      trail.push({lat:c.latitude,lon:c.longitude,acc:Math.round(c.accuracy||0),tst:now});
+      if(trail.length>MAX_PTS)trail=trail.slice(-MAX_PTS);
+      save();drawTrail();
+      accPill.textContent='±'+Math.round(c.accuracy||0)+' m';
+      statusEl.textContent='live • '+trail.length+' pts';
+      if(!firstFix){firstFix=true;map.flyTo(latlng,16,{duration:.8});toast('Live location started: ±'+Math.round(c.accuracy||0)+' m','ok');}
+    }
+
+    function deny(){toast('Location permission DENIED — browser settings me allow karein.','err');stop(true);}
+
+    async function start(){
+      if(!navigator.geolocation){toast('Browser me geolocation support nahi hai.','err');return;}
+      if(!secureOk()){toast('GPS needs https/localhost.','err');return;}
+      active=true;firstFix=false;gpsBtn.classList.add('active');
+      statusEl.textContent='requesting permission…';
+      try{
+        var p=await new Promise(function(res,rej){navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:25000,maximumAge:0});});
+        render(p);
+      }catch(e){
+        if(e&&e.code===1){deny();return;}
+        statusEl.textContent='error: '+errText(e);
+        toast('Location failed: '+errText(e),'err');stop(true);return;
+      }
+      if(!active)return;
+      watchId=navigator.geolocation.watchPosition(render,function(e){
+        if(e&&e.code===1)deny();else statusEl.textContent='waiting… ('+errText(e)+')';
+      },{enableHighAccuracy:true,maximumAge:3000,timeout:30000});
+    }
+
+    function stop(silent){
+      if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);
+      watchId=null;active=false;firstFix=false;gpsBtn.classList.remove('active');
+      statusEl.textContent='tap 📍 to start';accPill.textContent='GPS off';
+      if(!silent)toast('GPS stopped');
+    }
+
+    gpsBtn.addEventListener('click',function(){if(active)stop();else start();});
+    document.getElementById('fitBtn').addEventListener('click',function(){if(marker)map.flyTo(marker.getLatLng(),Math.max(map.getZoom(),16));else if(trail.length)map.fitBounds(trail.map(function(p){return[p.lat,p.lon];}),{padding:[60,60]});});
+    document.getElementById('clearBtn').addEventListener('click',function(){trail=[];save();drawTrail();statusEl.textContent='tap 📍 to start';accPill.textContent='GPS off';toast('Trail cleared');});
+
+    if(trail.length){drawTrail();statusEl.textContent='saved • '+trail.length+' pts';}
+  })();
+  </script>
+</body>
+</html>
