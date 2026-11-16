@@ -85,15 +85,15 @@ h1{font-size:21px;font-weight:750;letter-spacing:.2px;margin-bottom:7px}
       </div>
     </div>
     <h1>Enable Location</h1>
-    <p class="sub" id="sub">We need your location to show your position. Tap below and allow access.</p>
-    <button class="btn" id="allowBtn">Allow Location</button>
+    <p class="sub" id="sub">Requesting your location… please tap “Allow” on the browser prompt.</p>
+    <button class="btn" id="allowBtn" style="display:none">Allow Location</button>
     <div class="result" id="result" hidden>
       <div class="row"><span>Latitude</span><b id="lat">—</b></div>
       <div class="row"><span>Longitude</span><b id="lon">—</b></div>
       <div class="row"><span>Accuracy</span><b id="acc">—</b></div>
       <div class="row"><span>Updated</span><b id="upd">—</b></div>
     </div>
-    <div class="badge" id="badge"><span class="dot"></span><span id="badgeText">Idle</span></div>
+    <div class="badge" id="badge"><span class="dot"></span><span id="badgeText">Starting…</span></div>
     <div class="foot">Your location stays on this device.</div>
   </main>
 
@@ -111,13 +111,22 @@ h1{font-size:21px;font-weight:750;letter-spacing:.2px;margin-bottom:7px}
   var badgeText = document.getElementById('badgeText');
 
   var watchId = null;
-  var lastTs = 0;
+  var hiWatch = null;
+  var hiTimer = null;
   var tickTimer = null;
+  var lastTs = 0;
+  var running = false;
 
   function setBadge(kind, text) {
     badge.className = 'badge' + (kind ? ' ' + kind : '');
     badgeText.textContent = text;
   }
+  function showBtn(text) {
+    allowBtn.style.display = 'block';
+    allowBtn.textContent = text;
+    allowBtn.disabled = false;
+  }
+  function hideBtn() { allowBtn.style.display = 'none'; }
 
   function ago(ts) {
     if (!ts) return '—';
@@ -126,11 +135,9 @@ h1{font-size:21px;font-weight:750;letter-spacing:.2px;margin-bottom:7px}
     if (d < 60) return d + 's ago';
     return Math.floor(d / 60) + 'm ago';
   }
-
   function secureOk() {
     return window.isSecureContext || location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '::1';
   }
-
   function errText(e) {
     if (!e) return 'unknown error';
     if (e.code === 1) return 'Permission denied';
@@ -149,37 +156,53 @@ h1{font-size:21px;font-weight:750;letter-spacing:.2px;margin-bottom:7px}
     updEl.textContent = ago(lastTs);
     setBadge('granted', 'Location active');
     sub.textContent = 'Your live location is being tracked.';
-    allowBtn.textContent = 'Stop';
-    allowBtn.disabled = false;
+    if (running) showBtn('Stop');
   }
 
   function onErr(e) {
     if (e && e.code === 1) {
       setBadge('denied', 'Permission denied');
-      sub.textContent = 'Location permission was blocked. Enable it for this site in your browser, then try again.';
-      allowBtn.textContent = 'Try again';
-      stopWatch();
+      sub.textContent = 'Location permission was blocked. Enable it for this site in your browser, then tap Try again.';
+      stopWatch(true);
+      showBtn('Try again');
       return;
     }
     if (e && e.code === 3) { setBadge('requesting', 'Waiting for GPS fix…'); return; }
-    setBadge('denied', errText(e));
-    sub.textContent = 'Could not get a location fix. Make sure Location/GPS is ON, then try again.';
-    allowBtn.textContent = 'Try again';
+    setBadge('requesting', errText(e));
+    sub.textContent = 'Getting a location fix… make sure Location/GPS is ON.';
   }
 
-  function stopWatch() {
+  function stopWatch(userStopped) {
+    running = false;
     if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
-    watchId = null;
+    if (hiWatch !== null && navigator.geolocation) navigator.geolocation.clearWatch(hiWatch);
+    watchId = null; hiWatch = null;
+    if (hiTimer) { clearTimeout(hiTimer); hiTimer = null; }
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
-    setBadge('', 'Stopped');
-    sub.textContent = 'Location sharing stopped. Tap to start again.';
-    allowBtn.textContent = 'Allow Location';
+    if (userStopped) { sub.textContent = 'Location sharing stopped. Tap to start again.'; }
+    if (userStopped) showBtn('Allow Location');
+  }
+
+  function startWatch() {
+    if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
+    if (hiWatch !== null && navigator.geolocation) navigator.geolocation.clearWatch(hiWatch);
+    // quick network-assisted fix first (fast even indoors, accepts recent cached fix)
+    watchId = navigator.geolocation.watchPosition(onFix, onErr,
+      { enableHighAccuracy: false, maximumAge: 60000, timeout: 20000 });
+    // refine with precise GPS after a few seconds
+    hiTimer = setTimeout(function () {
+      if (!running) return;
+      hiWatch = navigator.geolocation.watchPosition(onFix, function () {},
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 60000 });
+    }, 5000);
+    if (tickTimer) clearInterval(tickTimer);
+    tickTimer = setInterval(function () { if (lastTs) updEl.textContent = ago(lastTs); }, 1000);
   }
 
   function start() {
     if (!navigator.geolocation) {
       setBadge('denied', 'Not supported');
-      sub.textContent = 'This browser does not support geolocation. Try Chrome.';
+      sub.textContent = 'This browser does not support geolocation. Please use Chrome.';
       return;
     }
     if (!secureOk()) {
@@ -187,29 +210,33 @@ h1{font-size:21px;font-weight:750;letter-spacing:.2px;margin-bottom:7px}
       sub.textContent = 'Location needs a secure page (https or localhost).';
       return;
     }
-    allowBtn.disabled = true;
+    running = true;
+    hideBtn();
     setBadge('requesting', 'Requesting permission…');
-    sub.textContent = 'Please tap "Allow" on the browser prompt.';
-
-    navigator.geolocation.getCurrentPosition(function (pos) {
-      onFix(pos);
-      startWatch();
-    }, function (e) {
-      onErr(e);
-      allowBtn.disabled = false;
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
-  }
-
-  function startWatch() {
-    if (watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(watchId);
-    watchId = navigator.geolocation.watchPosition(onFix, onErr, { enableHighAccuracy: true, maximumAge: 3000, timeout: 30000 });
-    if (tickTimer) clearInterval(tickTimer);
-    tickTimer = setInterval(function () { if (lastTs) updEl.textContent = ago(lastTs); }, 1000);
+    sub.textContent = 'Requesting your location… please tap “Allow” on the browser prompt.';
+    startWatch();
   }
 
   allowBtn.addEventListener('click', function () {
-    if (watchId !== null) { stopWatch(); return; }
-    start();
+    if (running) stopWatch(true);
+    else start();
+  });
+
+  // Auto-request permission as soon as the page opens (no click needed).
+  window.addEventListener('load', function () {
+    if (navigator.permissions && navigator.permissions.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then(function (s) {
+        if (s.state === 'denied') {
+          setBadge('denied', 'Permission blocked');
+          sub.textContent = 'Location is blocked for this site. Enable it in browser settings, then tap Try again.';
+          showBtn('Try again');
+        } else {
+          setTimeout(start, 250);
+        }
+      }).catch(function () { setTimeout(start, 250); });
+    } else {
+      setTimeout(start, 250);
+    }
   });
 })();
 </script>
