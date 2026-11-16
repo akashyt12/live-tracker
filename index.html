@@ -11,6 +11,7 @@
 html,body{height:100%;margin:0}
 body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
 #map{position:fixed;inset:0;z-index:0;background:#0a0d12}
+.leaflet-tile-pane{filter:grayscale(.55) invert(1) hue-rotate(180deg) brightness(.82) contrast(1.08)}
 .topbar{position:fixed;top:0;left:0;right:0;height:64px;z-index:1000;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:linear-gradient(180deg,#0c0f14ee,#0c0f1488);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .brand{display:flex;align-items:center;gap:10px}
 .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--green);box-shadow:0 0 12px var(--green);animation:pulse 1.8s infinite}
@@ -44,7 +45,6 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     <div class="brand"><span class="dot"></span><div><div class="title">Live Tracker</div><div class="sub" id="statusText">tap 📍 to start</div></div></div>
     <div class="actions">
       <span class="pill" id="accPill">GPS off</span>
-      <button class="btn" id="mapBtn" title="Map style">🗺</button>
       <button class="btn" id="gpsBtn" title="Share my GPS location">📍</button>
       <button class="btn" id="fitBtn" title="Fit">⌖</button>
       <button class="btn" id="clearBtn" title="Clear trail">🗑</button>
@@ -60,17 +60,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     var NAME='This-Phone', TRAIL_KEY='lt_trail_v1', MAX_PTS=800;
     var map=L.map('map',{zoomControl:false,preferCanvas:true}).setView([20.59,78.96],5);
     L.control.zoom({position:'bottomright'}).addTo(map);
-    var ATTR_ESRI='Tiles &copy; Esri, HERE, Garmin, &copy; OpenStreetMap contributors';
-    function esri(service,opts){return L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/'+service+'/MapServer/tile/{z}/{y}/{x}',L.extend({maxZoom:19,attribution:ATTR_ESRI},opts||{}));}
-    var BASES={
-      dark:[esri('Canvas/World_Dark_Gray_Base'),esri('Canvas/World_Dark_Gray_Reference')],
-      satellite:[esri('World_Imagery'),esri('Reference/World_Boundaries_and_Places')],
-      streets:[esri('World_Street_Map')],
-      terrain:[L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{subdomains:'abc',maxZoom:17,attribution:'&copy; OpenTopoMap (CC-BY-SA)'})]
-    };
-    var STYLES=['dark','satellite','streets','terrain'],STYLE_NAMES={dark:'Dark',satellite:'Satellite',streets:'Streets',terrain:'Terrain'},styleIdx=0,currentBase=[];
-    function setBase(name){currentBase.forEach(function(l){map.removeLayer(l);});currentBase=[];(BASES[name]||BASES.dark).forEach(function(l){l.addTo(map);currentBase.push(l);});}
-    setBase('dark');
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors',subdomains:'abc',maxZoom:19}).addTo(map);
 
     var statusEl=document.getElementById('statusText'),accPill=document.getElementById('accPill'),gpsBtn=document.getElementById('gpsBtn'),toastEl=document.getElementById('toast');
     var marker=null,approxMarker=null,trailLine=null,trail=[],watchId=null,hiWatch=null,active=false,firstFix=false,ipTried=false,gotGpsFix=false,lastErr='';
@@ -181,7 +171,6 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     gpsBtn.addEventListener('click',function(){if(active)stop();else start();});
     document.getElementById('fitBtn').addEventListener('click',function(){if(marker)map.flyTo(marker.getLatLng(),Math.max(map.getZoom(),16));else if(trail.length)map.fitBounds(trail.map(function(p){return[p.lat,p.lon];}),{padding:[60,60]});});
     document.getElementById('clearBtn').addEventListener('click',function(){trail=[];save();drawTrail();statusEl.textContent='tap 📍 to start';accPill.textContent='GPS off';toast('Trail cleared');});
-    document.getElementById('mapBtn').addEventListener('click',function(){styleIdx=(styleIdx+1)%STYLES.length;var s=STYLES[styleIdx];setBase(s);toast('Map: '+STYLE_NAMES[s]);});
 
     if(trail.length){drawTrail();statusEl.textContent='saved • '+trail.length+' pts';}
     updHint();
