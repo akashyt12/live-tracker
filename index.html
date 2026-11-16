@@ -63,7 +63,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors',subdomains:'abc',maxZoom:19}).addTo(map);
 
     var statusEl=document.getElementById('statusText'),accPill=document.getElementById('accPill'),gpsBtn=document.getElementById('gpsBtn'),toastEl=document.getElementById('toast');
-    var marker=null,trailLine=null,trail=[],watchId=null,active=false,firstFix=false;
+    var marker=null,trailLine=null,trail=[],watchId=null,hiWatch=null,active=false,firstFix=false;
     try{trail=JSON.parse(localStorage.getItem(TRAIL_KEY)||'[]')||[];}catch(e){trail=[];}
 
     function toast(m,k){toastEl.textContent=m;toastEl.className='toast show'+(k?' '+k:'');clearTimeout(toast._t);toast._t=setTimeout(function(){toastEl.className='toast';},4200);}
@@ -72,6 +72,8 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
     function save(){try{localStorage.setItem(TRAIL_KEY,JSON.stringify(trail.slice(-MAX_PTS)));}catch(e){}}
     function secureOk(){return window.isSecureContext||location.hostname==='localhost'||location.hostname==='127.0.0.1'||location.hostname==='::1';}
     function drawTrail(){var pts=trail.map(function(p){return[p.lat,p.lon];});if(trailLine){map.removeLayer(trailLine);trailLine=null;}if(pts.length>1){trailLine=L.polyline(pts,{color:'#22d3ee',weight:3,opacity:.85,smoothFactor:1}).addTo(map);}}
+    function distM(la1,lo1,la2,lo2){var R=6371000,t=Math.PI/180,dLa=(la2-la1)*t,dLo=(lo2-lo1)*t;var a=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1*t)*Math.cos(la2*t)*Math.sin(dLo/2)*Math.sin(dLo/2);return 2*R*Math.asin(Math.min(1,Math.sqrt(a)));}
+    function maybeAddTrail(lat,lon,acc,tst){var last=trail[trail.length-1];if(!last){trail.push({lat:lat,lon:lon,acc:acc,tst:tst});return true;}var dm=distM(last.lat,last.lon,lat,lon);if(dm>8||(tst-last.tst)>15){trail.push({lat:lat,lon:lon,acc:acc,tst:tst});if(trail.length>MAX_PTS)trail=trail.slice(-MAX_PTS);return true;}last.lat=lat;last.lon=lon;last.acc=acc;last.tst=tst;return false;}
 
     function render(pos){
       var c=pos.coords,now=Math.floor(Date.now()/1000),latlng=[c.latitude,c.longitude];
@@ -80,9 +82,7 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
         marker=L.marker(latlng,{icon:L.divIcon({className:'',html:'<div class="marker-pin"></div>',iconSize:[20,20],iconAnchor:[10,10],popupAnchor:[0,-12]})}).addTo(map);
         marker.bindPopup('<b>'+NAME+'</b><br>'+info);
       }else{marker.setLatLng(latlng);marker.setPopupContent('<b>'+NAME+'</b><br>'+info);}
-      trail.push({lat:c.latitude,lon:c.longitude,acc:Math.round(c.accuracy||0),tst:now});
-      if(trail.length>MAX_PTS)trail=trail.slice(-MAX_PTS);
-      save();drawTrail();
+      if(maybeAddTrail(c.latitude,c.longitude,Math.round(c.accuracy||0),now)){save();drawTrail();}
       accPill.textContent='±'+Math.round(c.accuracy||0)+' m';
       statusEl.textContent='live • '+trail.length+' pts';
       if(!firstFix){firstFix=true;map.flyTo(latlng,16,{duration:.8});toast('Live location started: ±'+Math.round(c.accuracy||0)+' m','ok');}
@@ -94,17 +94,21 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
       return navigator.permissions.query({name:'geolocation'}).then(function(s){return s.state;}).catch(function(){return 'unknown';});
     }
 
+    function onPos(pos){ render(pos); }
+    function onErr(e){
+      if(e&&e.code===1){deny();return;}
+      if(e&&e.code===3){statusEl.textContent='GPS fix ka wait… (timeout) retrying…';}
+      else{statusEl.textContent='waiting for GPS fix… ('+errText(e)+')';}
+      if(!start._toasted){start._toasted=true;toast('GPS fix nahi mil raha. Phone me Location/GPS ON karo, Chrome ko Location Allow karo, aur khuli jagah par try karo.','err');}
+    }
     function startWatch(){
-      watchId=navigator.geolocation.watchPosition(function(pos){
-        var c=pos.coords;
-        statusEl.textContent='live • ±'+Math.round(c.accuracy||0)+' m';
-        render(pos);
-      },function(e){
-        if(e&&e.code===1){deny();return;}
-        if(e&&e.code===3){statusEl.textContent='GPS fix ka wait… (timeout) retrying';return;}
-        statusEl.textContent='waiting for GPS fix… ('+errText(e)+')';
-        if(!start._toasted){start._toasted=true;toast('GPS fix nahi mil raha — phone me Location/GPS ON karo aur khuli jagah par try karo.','err');}
-      },{enableHighAccuracy:true,maximumAge:3000,timeout:20000});
+      // 1) quick network-assisted fix (fast even indoors, accepts recent cached fix)
+      watchId=navigator.geolocation.watchPosition(onPos,onErr,{enableHighAccuracy:false,maximumAge:60000,timeout:20000});
+      // 2) after a few seconds, also request GPS-precise fixes to refine accuracy
+      setTimeout(function(){
+        if(!active)return;
+        hiWatch=navigator.geolocation.watchPosition(onPos,function(){},{enableHighAccuracy:true,maximumAge:5000,timeout:60000});
+      },5000);
     }
 
     async function start(){
@@ -120,7 +124,8 @@ body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,
 
     function stop(silent){
       if(watchId!==null&&navigator.geolocation)navigator.geolocation.clearWatch(watchId);
-      watchId=null;active=false;firstFix=false;gpsBtn.classList.remove('active');
+      if(hiWatch!==null&&navigator.geolocation)navigator.geolocation.clearWatch(hiWatch);
+      watchId=null;hiWatch=null;active=false;firstFix=false;gpsBtn.classList.remove('active');
       statusEl.textContent='tap 📍 to start';accPill.textContent='GPS off';
       if(!silent)toast('GPS stopped');
     }
